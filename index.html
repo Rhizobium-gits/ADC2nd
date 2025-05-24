@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADvance Campus 3D マップ</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        #container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+        }
+        
+        .ui-panel {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+        }
+        
+        #header {
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 25px;
+            text-align: center;
+        }
+        
+        #header h1 {
+            color: #2c3e50;
+            font-size: 1.5em;
+            margin: 0;
+            font-weight: 600;
+        }
+        
+        #member-card {
+            top: 80px;
+            right: 20px;
+            width: 280px;
+            padding: 20px;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        #member-card h2 {
+            color: #2c3e50;
+            margin-bottom: 12px;
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+        
+        #member-card .research {
+            color: #555;
+            font-size: 0.9em;
+            line-height: 1.4;
+            margin-bottom: 12px;
+        }
+        
+        .tag {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            margin: 2px;
+            font-weight: 500;
+        }
+        
+        #controls {
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 20px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .control-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+        }
+        
+        .control-btn:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+        }
+        
+        .control-btn.secondary {
+            background: #2196F3;
+            box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+        }
+        
+        .control-btn.secondary:hover {
+            background: #1976D2;
+            box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+        }
+        
+        #legend {
+            bottom: 20px;
+            right: 20px;
+            padding: 15px;
+            min-width: 160px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            font-size: 0.85em;
+            color: #555;
+        }
+        
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .instruction {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #666;
+            font-size: 1.1em;
+            z-index: 50;
+            animation: fadeOut 3s forwards;
+        }
+        
+        @keyframes fadeOut {
+            0%, 70% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #666;
+            font-size: 1.2em;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div class="loading">読み込み中...</div>
+        
+        <div class="instruction">
+            🖱️ ドラッグで回転 | 🎯 球体をクリック | ⚡ スクロールでズーム
+        </div>
+        
+        <div id="header" class="ui-panel">
+            <h1>ADvance Campus 研究者マップ</h1>
+        </div>
+        
+        <div id="member-card" class="ui-panel">
+            <h2 id="member-name"></h2>
+            <div id="member-research" class="research"></div>
+            <div id="member-tags"></div>
+        </div>
+        
+        <div id="controls" class="ui-panel">
+            <button class="control-btn" onclick="resetView()">🏠 ホーム</button>
+            <button class="control-btn secondary" onclick="toggleMode()">🔄 表示切替</button>
+            <button class="control-btn secondary" onclick="randomView()">🎲 ランダム視点</button>
+        </div>
+        
+        <div id="legend" class="ui-panel">
+            <div class="legend-item">
+                <div class="legend-dot" style="background: #FF6B6B;"></div>
+                工学・技術
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background: #4ECDC4;"></div>
+                自然科学
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background: #45B7D1;"></div>
+                人文学
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background: #96CEB4;"></div>
+                社会科学
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background: #FECA57;"></div>
+                学際領域
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fieldColors = {
+            engineering: 0xFF6B6B,
+            science: 0x4ECDC4,
+            humanities: 0x45B7D1,
+            social: 0x96CEB4,
+            interdisciplinary: 0xFECA57
+        };
+
+        const members = {
+            engineering: [
+                {name: '立崎乃衣', research: 'ロボット開発・機械工学・CEO', tags: ['CEO', 'ロボット', '機械工学']},
+                {name: '片岩拓也', research: 'AIセキュリティ・機械学習', tags: ['AI', 'セキュリティ', 'ML']},
+                {name: '大城彩奈', research: 'ナノバイオエンジニアリング・所長', tags: ['バイオ', 'ナノテク', '所長']},
+                {name: '姉川唯', research: 'データサイエンス・音声解析', tags: ['データ', '音声', 'AI']},
+                {name: '町田幸大', research: 'ロボコン・航空宇宙', tags: ['ロボット', '宇宙', 'FRC']},
+                {name: '篠部虹人', research: 'HCI・感性工学・触覚デザイン', tags: ['HCI', '触覚', 'UI/UX']},
+                {name: '佐藤希美', research: 'ロボティクス・制御工学', tags: ['ロボット', '制御', '組み込み']},
+                {name: '白鳥愛麗', research: '機械工学・アプリ開発', tags: ['機械', 'アプリ', 'STEM']},
+                {name: '立木桃子', research: '音楽×脳科学×AI×VR', tags: ['音楽', '脳科学', 'VR']},
+                {name: '出口優人', research: 'ICT・ヘルスケア技術', tags: ['ICT', 'ヘルス', 'IoT']}
+            ],
+            science: [
+                {name: '鈴木亜門', research: '分子動力学・物理学・複素関数', tags: ['物理', '分子', '数学']},
+                {name: '鷲足祐香', research: '水処理技術・微生物工学', tags: ['環境', '微生物', '水処理']},
+                {name: '近藤典雅', research: '超伝導・物性物理・統計力学', tags: ['超伝導', '物性', '統計']},
+                {name: '大塚蓮', research: '進化生物学・バイオミメティクス', tags: ['進化', '骨格', 'バイオ']},
+                {name: '山端葵子', research: '両生類研究・再生医学', tags: ['両生類', '再生', '生態']},
+                {name: '佐藤翼', research: '微生物・環境科学', tags: ['微生物', '環境', 'バイオ']},
+                {name: '小松和滉', research: '植物生理学・数理モデル', tags: ['植物', '数理', '生理']}
+            ],
+            humanities: [
+                {name: '甲斐晴奈', research: '生命倫理・医療倫理・宗教学', tags: ['倫理', '医療', '宗教']},
+                {name: '高原沙理楽', research: '平和研究・言語学', tags: ['平和', '言語', '文化']},
+                {name: '佐藤彩音', research: '言語教育・多文化研究', tags: ['言語', '教育', '多文化']},
+                {name: '西尾明日花', research: '教育学・心理学', tags: ['教育', '心理', '人文']},
+                {name: '藤田大悟', research: '仏教・地政学・教育', tags: ['仏教', '地政学', '教育']},
+                {name: '藤本凛', research: 'アート・立体造形', tags: ['アート', '造形', 'デザイン']}
+            ],
+            social: [
+                {name: '笠井凜心', research: '食政策・公共政策・和食文化', tags: ['食政策', '和食', '文化']},
+                {name: '豊田英杜', research: '森林経済・カーボンクレジット', tags: ['森林', '経済', '環境']},
+                {name: '岩本夏織', research: '心理学・ストレス研究', tags: ['心理', 'ストレス', 'メンタル']},
+                {name: '大石紗也', research: '野外教育・平和活動', tags: ['教育', 'キャンプ', '平和']}
+            ],
+            interdisciplinary: [
+                {name: '中村魁良', research: '数学教育・競技数学', tags: ['数学', '教育', '競技']},
+                {name: '立木桃子', research: '音楽×脳科学×AI×VR×教育', tags: ['学際', '音楽', '脳科学']},
+                {name: '大城彩奈', research: 'バイオ×物理×社会学', tags: ['学際', 'バイオ', '社会']}
+            ]
+        };
+
+        let scene, camera, renderer;
+        let memberNodes = [];
+        let isMouseDown = false;
+        let mouseX = 0, mouseY = 0;
+        let targetCameraPosition = new THREE.Vector3();
+        let cameraPosition = new THREE.Vector3(12, 8, 12);
+        let raycaster, mouse;
+        let showConnections = true;
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf8f9fa);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.copy(cameraPosition);
+            camera.lookAt(0, 0, 0);
+            targetCameraPosition.copy(camera.position);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            // 明るいライティング
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            directionalLight.position.set(10, 10, 5);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            createNodes();
+            setupControls();
+
+            window.addEventListener('resize', onWindowResize);
+            document.querySelector('.loading').style.display = 'none';
+
+            animate();
+        }
+
+        function createNodes() {
+            const positions = {
+                engineering: [6, 2, 0],
+                science: [0, 6, 2],
+                humanities: [-6, 0, 2],
+                social: [0, -4, 0],
+                interdisciplinary: [0, 0, -6]
+            };
+
+            Object.keys(members).forEach(fieldKey => {
+                const fieldMembers = members[fieldKey];
+                const basePos = positions[fieldKey];
+                const color = fieldColors[fieldKey];
+
+                fieldMembers.forEach((member, index) => {
+                    const angle = (index / fieldMembers.length) * Math.PI * 2;
+                    const radius = 3;
+                    const x = basePos[0] + Math.cos(angle) * radius;
+                    const y = basePos[1] + Math.sin(angle) * radius * 0.6;
+                    const z = basePos[2] + Math.sin(angle * 2) * radius * 0.3;
+
+                    const geometry = new THREE.SphereGeometry(0.4, 16, 16);
+                    const material = new THREE.MeshLambertMaterial({ 
+                        color: color,
+                        transparent: true,
+                        opacity: 0.9
+                    });
+                    
+                    const sphere = new THREE.Mesh(geometry, material);
+                    sphere.position.set(x, y, z);
+                    sphere.userData = { 
+                        member: member,
+                        field: fieldKey,
+                        originalY: y,
+                        index: index
+                    };
+                    
+                    sphere.castShadow = true;
+                    sphere.receiveShadow = true;
+                    
+                    scene.add(sphere);
+                    memberNodes.push(sphere);
+                });
+            });
+        }
+
+        function setupControls() {
+            renderer.domElement.addEventListener('mousedown', onMouseDown);
+            renderer.domElement.addEventListener('mousemove', onMouseMove);
+            renderer.domElement.addEventListener('mouseup', onMouseUp);
+            renderer.domElement.addEventListener('wheel', onWheel);
+            renderer.domElement.addEventListener('click', onClick);
+        }
+
+        function onMouseDown(e) {
+            isMouseDown = true;
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        }
+
+        function onMouseMove(e) {
+            if (isMouseDown) {
+                const deltaX = e.clientX - mouseX;
+                const deltaY = e.clientY - mouseY;
+
+                const spherical = new THREE.Spherical();
+                spherical.setFromVector3(targetCameraPosition);
+                spherical.theta -= deltaX * 0.01;
+                spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi + deltaY * 0.01));
+
+                targetCameraPosition.setFromSpherical(spherical);
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            } else {
+                // ホバー効果
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(memberNodes);
+
+                memberNodes.forEach(node => {
+                    node.scale.set(1, 1, 1);
+                    node.material.opacity = 0.9;
+                });
+
+                if (intersects.length > 0) {
+                    const hoveredNode = intersects[0].object;
+                    hoveredNode.scale.set(1.3, 1.3, 1.3);
+                    hoveredNode.material.opacity = 1;
+                    renderer.domElement.style.cursor = 'pointer';
+                } else {
+                    renderer.domElement.style.cursor = 'default';
+                }
+            }
+        }
+
+        function onMouseUp() {
+            isMouseDown = false;
+        }
+
+        function onWheel(e) {
+            const scale = e.deltaY > 0 ? 1.1 : 0.9;
+            targetCameraPosition.multiplyScalar(scale);
+            targetCameraPosition.clampLength(5, 25);
+        }
+
+        function onClick(e) {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(memberNodes);
+
+            if (intersects.length > 0) {
+                const member = intersects[0].object.userData.member;
+                showMemberDetails(member);
+            } else {
+                hideMemberDetails();
+            }
+        }
+
+        function showMemberDetails(member) {
+            document.getElementById('member-name').textContent = member.name;
+            document.getElementById('member-research').textContent = member.research;
+            
+            const tagsDiv = document.getElementById('member-tags');
+            tagsDiv.innerHTML = '';
+            member.tags.forEach(tag => {
+                const span = document.createElement('span');
+                span.className = 'tag';
+                span.textContent = tag;
+                tagsDiv.appendChild(span);
+            });
+            
+            document.getElementById('member-card').style.display = 'block';
+        }
+
+        function hideMemberDetails() {
+            document.getElementById('member-card').style.display = 'none';
+        }
+
+        function resetView() {
+            targetCameraPosition.set(12, 8, 12);
+            hideMemberDetails();
+        }
+
+        function toggleMode() {
+            memberNodes.forEach(node => {
+                const randomOffset = (Math.random() - 0.5) * 2;
+                node.userData.originalY += randomOffset;
+            });
+        }
+
+        function randomView() {
+            const radius = 15;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.random() * Math.PI * 0.5 + Math.PI * 0.25;
+            
+            targetCameraPosition.set(
+                radius * Math.sin(phi) * Math.cos(theta),
+                radius * Math.cos(phi),
+                radius * Math.sin(phi) * Math.sin(theta)
+            );
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // スムーズなカメラ移動
+            camera.position.lerp(targetCameraPosition, 0.05);
+            camera.lookAt(0, 0, 0);
+            
+            // 軽やかな浮遊アニメーション
+            const time = Date.now() * 0.001;
+            memberNodes.forEach((node, index) => {
+                node.position.y = node.userData.originalY + Math.sin(time + index * 0.5) * 0.2;
+                node.rotation.y += 0.01;
+            });
+            
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>
